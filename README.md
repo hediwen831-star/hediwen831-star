@@ -56,6 +56,10 @@
 
 除了 CLI，还有一个 FastAPI 写的只读看板 + REST 接口（默认只绑回环，非回环绑定必须带 token）。
 
+![ASP 看板](https://raw.githubusercontent.com/hediwen831-star/attack-surface/main/docs/images/dashboard.png)
+
+> 上图是拿 vulnlab 实测跑出来的真实数据（27 处命中），不是占位图。
+
 **规模**：318 个单元测试（**全部离线可跑**，DNS/HTTP 用 monkeypatch 隔离）、
 覆盖率 65%、ruff 零告警、Docker Compose 一键启动。
 
@@ -75,6 +79,8 @@ SQL 注入    XSS（反射型）  文件上传      SSRF
 命令注入    文件包含（LFI） PHP 反序列化  XXE
 JWT 伪造    CSRF           SSTI         越权（IDOR）
 ```
+
+![VulnLab 首页：12 个场景的矩阵](https://raw.githubusercontent.com/hediwen831-star/vulnlab/main/docs/images/lab-index.png)
 
 **三档结构不是难度分级，是三种不同的失败方式**：
 
