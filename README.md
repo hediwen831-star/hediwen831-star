@@ -1,16 +1,15 @@
 # 何帝文 · 安全工程作品集
 
 > 网络工程（网络安全方向）在读，目标岗位：**渗透测试 / 红队**。
->这是我的项目说明
-> 
+>
 > 下面三个项目不是三份互不相干的代码 —— 它们互相咬合成一个闭环：
 > **靶场提供确定的目标，平台证明 PoC 能被自动化消费，插件补上「人工验证」那一环。**
 
 | 项目 | 定位 | 技术栈 | 规模 |
 |---|---|---|---|
-| **[attack-surface](https://github.com/hediwen831-star/attack-surface)** | 外网攻击面测绘与漏洞验证平台 | Python 3.11+ · asyncio · SQLAlchemy | 318 个单元测试 · ruff 零告警 |
-| **[vulnlab](https://github.com/hediwen831-star/vulnlab)** | Web 漏洞靶场与 PoC 基准集 | PHP 7.3/7.4/8.1 · SQLite · 原生 | 12 个场景 · 75 条 CI 断言 |
-| **[burp-idor-detector](https://github.com/hediwen831-star/burp-idor-detector)** | Burp 越权（IDOR）检测插件 | Java 21 · Burp Montoya API | 81 个单元测试 · v0.1.0 |
+| **[attack-surface](https://github.com/hediwen831-star/attack-surface)** | 外网攻击面测绘与漏洞验证平台 | Python 3.11+ · asyncio · SQLAlchemy | 434 个单元测试 · 88% 覆盖率 · ruff 零告警 |
+| **[vulnlab](https://github.com/hediwen831-star/vulnlab)** | Web 漏洞靶场与 PoC 基准集 | PHP 7.3/7.4/8.1 · SQLite · 原生 | 13 个场景 · 171 条 CI 断言 |
+| **[burp-idor-detector](https://github.com/hediwen831-star/burp-idor-detector)** | Burp 越权（IDOR）检测插件 | Java 21 · Burp Montoya API | 94 个单元测试 · v0.1.1 |
 
 ---
 
@@ -20,7 +19,7 @@
         ┌──────────────────────┐              ┌──────────────────────┐
         │      vulnlab         │   机读 PoC    │    attack-surface    │
         │                      │ ───────────► │                      │
-        │  12 个漏洞场景        │              │  YAML PoC 引擎        │
+        │  13 个漏洞场景        │              │  YAML PoC 引擎        │
         │  每个都写成三档：      │              │  （白名单 DSL，无 eval）│
         │   low  有漏洞         │ ◄─────────── │                      │
         │   medium 能被绕过      │  基准 / 误报诱饵 │  负向对照校验防误报    │
@@ -59,10 +58,10 @@
 
 ![ASP 看板](https://raw.githubusercontent.com/hediwen831-star/attack-surface/main/docs/images/dashboard.png)
 
-> 上图是拿 vulnlab 实测跑出来的真实数据（27 处命中），不是占位图。
+> 上图是拿 vulnlab 实测跑出来的真实数据（31 处命中：13 严重 / 16 高危 / 2 中危），不是占位图。
 
-**规模**：318 个单元测试（**全部离线可跑**，DNS/HTTP 用 monkeypatch 隔离）、
-覆盖率 65%、ruff 零告警、Docker Compose 一键启动。
+**规模**：434 个单元测试（**全部离线可跑**，DNS/HTTP 用 monkeypatch 隔离）、
+覆盖率 88%、ruff 零告警、Docker Compose 一键启动。
 
 📖 [README](https://github.com/hediwen831-star/attack-surface) ·
 [架构与技术栈详解（用了什么 / 为什么用它 / 核心逻辑怎么跑）](https://github.com/hediwen831-star/attack-surface/blob/main/ARCHITECTURE.md)
@@ -73,15 +72,16 @@
 
 > 用 PHP 从零写的漏洞靶场。**每个漏洞都凑齐四件套：三档源码 + Writeup + 机读 PoC + 修复对照。**
 
-12 个场景，覆盖 OWASP Top 10 的主体：
+13 个场景，覆盖 OWASP Top 10 的主体：
 
 ```
 SQL 注入    XSS（反射型）  文件上传      SSRF
 命令注入    文件包含（LFI） PHP 反序列化  XXE
 JWT 伪造    CSRF           SSTI         越权（IDOR）
+会话凭据越权（idor-session）
 ```
 
-![VulnLab 首页：12 个场景的矩阵](https://raw.githubusercontent.com/hediwen831-star/vulnlab/main/docs/images/lab-index.png)
+![VulnLab 首页：13 个场景的矩阵](https://raw.githubusercontent.com/hediwen831-star/vulnlab/main/docs/images/lab-index.png)
 
 **三档结构不是难度分级，是三种不同的失败方式**：
 
@@ -102,11 +102,11 @@ JWT 伪造    CSRF           SSTI         越权（IDOR）
 
 > **防护所依据的那个信息，如果是请求方可以自由决定的，那它就挡不住请求方。**
 
-CI 里 75 条断言守着这批资产不被改坏，每条都分三类：
+CI 里 171 条断言守着这批资产不被改坏，每条都分三类：
 **漏洞场景**（没被改坏）、**对照组**（证明防护确实在工作）、**反向保护**（修复没有过度）。
 
 📖 [README](https://github.com/hediwen831-star/vulnlab) ·
-[12 份 Writeup](https://github.com/hediwen831-star/vulnlab/tree/main/writeups) ·
+[13 份 Writeup](https://github.com/hediwen831-star/vulnlab/tree/main/writeups) ·
 [设计文档：技术栈与教学设计](https://github.com/hediwen831-star/vulnlab/blob/main/docs/DESIGN.md)
 
 ---
@@ -131,7 +131,7 @@ CI 里 75 条断言守着这批资产不被改坏，每条都分三类：
 > **排除「检测特征被检测行为本身制造出来」的可能。**
 
 **设计上值得一提的**：判定逻辑（`ResponseComparator`）刻意与 Burp API 解耦，
-所以 81 个测试里绝大多数能脱离 Burp 单独跑。
+所以 94 个测试里绝大多数能脱离 Burp 单独跑。
 
 📖 [README](https://github.com/hediwen831-star/burp-idor-detector) ·
 [设计文档：越权检测的判定模型](https://github.com/hediwen831-star/burp-idor-detector/blob/main/docs/DESIGN.md)
@@ -152,8 +152,8 @@ python -m asp.cli poc run http://127.0.0.1:8080 --dir ../vulnlab/pocs
 实测输出：
 
 ```
-执行 PoC: 18   耗时: 3.7s
-命中: 27
+执行 PoC: 21   耗时: 5.8s
+命中: 31
 
 critical  vulnlab-command-injection          /cmdi/low.php                   1.00
 critical  vulnlab-ssti-template-injection    /ssti/low.php                   1.00
@@ -162,7 +162,7 @@ high      vulnlab-idor-broken-access-control /idor/low.php?order_id=1003      1.
 high      vulnlab-csrf-state-change          /csrf/medium.php                1.00
 ```
 
-**12 个场景的机读 PoC 全部命中**，且 `high` 档一处未报 —— 这就是「基准集」的作用。
+**13 个场景的机读 PoC 全部命中**，且 `high` 档一处未报 —— 这就是「基准集」的作用。
 
 ---
 
@@ -173,7 +173,7 @@ high      vulnlab-csrf-state-change          /csrf/medium.php                1.0
    为什么负向对照要拿「不存在的 ID」而不是「另一个真实 ID」
 2. **有真实的调试记录** —— 开发中实际踩到过「报错信息回显 payload 导致特征被自己制造出来」
    （误报 6 → 3）、「CI 断言和机读 PoC 是两套载荷，PoC 坏了 CI 却全绿」这些坑，都修掉了
-3. **工程化完整** —— 318 + 81 个离线可跑的单测、ruff 零告警、GitHub Actions CI、
+3. **工程化完整** —— 434 + 94 个离线可跑的单测、ruff 零告警、GitHub Actions CI、
    配置校验、结构化日志、Docker 一键启动
 4. **有闭环** —— 三个项目互为验证，而不是三堆不相干的代码
 
