@@ -1,150 +1,85 @@
 # 何帝文 · 安全工程作品集
 
-> 网络工程（网络安全方向）在读，目标岗位：**渗透测试 / 红队**。
->
-> 下面三个项目不是三份互不相干的代码 —— 它们互相咬合成一个闭环：
-> **靶场提供确定的目标，平台证明 PoC 能被自动化消费，插件补上「人工验证」那一环。**
+网络工程（网络安全方向）在读，目标岗位是渗透测试 / 红队。
 
-| 项目 | 定位 | 技术栈 | 规模 |
+这里是我主要在做的三个项目：一个 Web 漏洞靶场、一个攻击面扫描平台、一个 Burp 越权检测插件。靶场给平台提供确定的测试目标，插件则把同一套「先做对照、再下结论」的方法用在真实流量上。
+
+| 项目 | 做什么 | 技术栈 | 规模 |
 |---|---|---|---|
-| **[attack-surface](https://github.com/hediwen831-star/attack-surface)** | 外网攻击面测绘与漏洞验证平台 | Python 3.11+ · asyncio · SQLAlchemy | 434 个单元测试 · 88% 覆盖率 · ruff 零告警 |
-| **[vulnlab](https://github.com/hediwen831-star/vulnlab)** | Web 漏洞靶场与 PoC 基准集 | PHP 7.3/7.4/8.1 · SQLite · 原生 | 13 个场景 · 171 条 CI 断言 |
+| **[attack-surface](https://github.com/hediwen831-star/attack-surface)** | 外网攻击面测绘与漏洞验证 | Python 3.11+ · asyncio · SQLAlchemy | 434 个单元测试 · 88% 覆盖率 · ruff 无告警 |
+| **[vulnlab](https://github.com/hediwen831-star/vulnlab)** | Web 漏洞靶场与 PoC 基准集 | PHP 7.3 / 7.4 / 8.1 · SQLite | 13 个场景 · 171 条 CI 断言 |
 | **[burp-idor-detector](https://github.com/hediwen831-star/burp-idor-detector)** | Burp 越权（IDOR）检测插件 | Java 21 · Burp Montoya API | 94 个单元测试 · v0.1.1 |
 
----
+## attack-surface
 
-## 闭环长什么样
+外网攻击面测绘与漏洞验证平台。资产发现、服务识别、指纹匹配、PoC 验证、报告导出做成一条异步流水线，每次扫描落库，可以对比前后两次结果。
 
-```
-        ┌──────────────────────┐              ┌──────────────────────┐
-        │      vulnlab         │   机读 PoC    │    attack-surface    │
-        │                      │ ───────────► │                      │
-        │  13 个漏洞场景        │              │  YAML PoC 引擎        │
-        │  每个都写成三档：      │              │  （白名单 DSL，无 eval）│
-        │   low  有漏洞         │ ◄─────────── │                      │
-        │   medium 能被绕过      │  基准 / 误报诱饵 │  负向对照校验防误报    │
-        │   high 已修复         │              │  资产变更 diff        │
-        └──────────────────────┘              └──────────────────────┘
-                                                       ▲
-                                                       │ 同一套「负向对照」思路
-                                                       ▼
-                                        ┌──────────────────────────────┐
-                                        │     burp-idor-detector       │
-                                        │  从真实流量里三态对比：        │
-                                        │   ① 基准  ② 换身份重放         │
-                                        │   ③ 不存在的 ID 对照           │
-                                        └──────────────────────────────┘
-```
+几个实现上的选择：
 
-**为什么靶场的 `high` 档重要**：它是**天然的误报诱饵**。
-引擎在那里报漏洞，就说明判定逻辑有问题。这比「报告列出 50 个问题」有用得多。
-
----
-
-## 1. attack-surface
-
-> 把「资产发现 → 服务识别 → 指纹匹配 → 漏洞验证 → 报告」做成一条可插拔的异步流水线。
-
-**核心是自研的 YAML PoC 引擎** —— 这是它与「调个现成扫描器」的区别所在：
-
-- **白名单 DSL，不用 `eval`** —— PoC 是数据不是代码。有一条测试专门守着这条线
-  （`test_dsl_rejects_non_whitelisted_syntax`）
-- **负向对照校验** —— 每个 PoC 带一条「随机路径」的对照请求，
-  排除「检测特征被检测行为本身制造出来」这类误报
-- **泛解析基线检测** —— 先摸清目标是否对任意子域都返回同样内容，再判断子域是否真实存在
-- **资产变更 diff** —— 两次扫描之间的新增/消失资产
-
-除了 CLI，还有一个 FastAPI 写的只读看板 + REST 接口（默认只绑回环，非回环绑定必须带 token）。
+- PoC 用 YAML 描述，匹配条件走白名单 DSL，不执行任意代码
+- 命中后向同目录随机路径再发一次请求，排除「任何路径都返回 200」这类误报
+- 子域枚举前先做泛解析基线，避免把泛解析记录当成资产
+- 每次扫描独立成任务，资产变更可以 diff
 
 ![ASP 看板](https://raw.githubusercontent.com/hediwen831-star/attack-surface/main/docs/images/dashboard.png)
 
-> 上图是拿 vulnlab 实测跑出来的真实数据（31 处命中：13 严重 / 16 高危 / 2 中危），不是占位图。
+图是对 vulnlab 的实测结果：31 处命中，13 严重 / 16 高危 / 2 中危。
 
-**规模**：434 个单元测试（**全部离线可跑**，DNS/HTTP 用 monkeypatch 隔离）、
-覆盖率 88%、ruff 零告警、Docker Compose 一键启动。
+测试 434 个，覆盖率 88%，ruff 无告警。CI 跑 Python 3.11 / 3.12 / 3.13 和 Windows，另有 Docker 构建任务。
 
-📖 [README](https://github.com/hediwen831-star/attack-surface) ·
-[架构与技术栈详解（用了什么 / 为什么用它 / 核心逻辑怎么跑）](https://github.com/hediwen831-star/attack-surface/blob/main/ARCHITECTURE.md)
+[README](https://github.com/hediwen831-star/attack-surface) ·
+[架构说明](https://github.com/hediwen831-star/attack-surface/blob/main/ARCHITECTURE.md)
 
----
+## vulnlab
 
-## 2. vulnlab
+PHP 写的 Web 漏洞靶场，13 个场景。每个场景分三档：`low` 没有防护，`medium` 有防护但能绕过，`high` 是修好之后的实现。
 
-> 用 PHP 从零写的漏洞靶场。**每个漏洞都凑齐四件套：三档源码 + Writeup + 机读 PoC + 修复对照。**
+每个场景配四样东西：三档源码、Writeup、机读 YAML PoC、修复对照。`high` 档页面功能正常，正常请求照常返回，只是漏洞路径被堵住。
 
-13 个场景，覆盖 OWASP Top 10 的主体：
+medium 档的绕过大多属于同一类问题：防护依赖了请求方能控制的信息。例如：
 
-```
-SQL 注入    XSS（反射型）  文件上传      SSRF
-命令注入    文件包含（LFI） PHP 反序列化  XXE
-JWT 伪造    CSRF           SSTI         越权（IDOR）
-会话凭据越权（idor-session）
-```
+- SQL 注入：黑名单删除 `union`，双写 `ununionion` 又拼了回来
+- 反序列化：类名黑名单不区分大小写，小写 `cache` 即可绕过
+- XXE：过滤器只看请求体，实体声明挪到外部 DTD 就看不见了
+- CSRF：只查 `Referer`，客户端可以不发送
+- 越权：归属校验写对了，但「我是谁」来自请求参数 `uid`
 
-![VulnLab 首页：13 个场景的矩阵](https://raw.githubusercontent.com/hediwen831-star/vulnlab/main/docs/images/lab-index.png)
+![VulnLab 首页](https://raw.githubusercontent.com/hediwen831-star/vulnlab/main/docs/images/lab-index.png)
 
-**三档结构不是难度分级，是三种不同的失败方式**：
+CI 有 171 条断言，分三类：漏洞场景没被改坏、防护确实生效、修复没有把功能删掉。
 
-| | 这一档演示什么 |
-|---|---|
-| **low** | 完全没有防护 |
-| **medium** | 有防护，但**防护依赖了请求方可控的信息**，或者**抓错了特征** |
-| **high** | 换方向：**取消能力**而不是加强过滤 |
-
-举几个 medium 档的真实绕过 —— 它们的共同结构比单个技巧更值得看：
-
-- **SQL 注入**：黑名单删 `union` → 双写 `ununionion`（删除动作把片段拼了回来）
-- **反序列化**：类名黑名单 → 小写 `cache`（PHP 找类时不区分大小写）
-- **XXE**：过滤请求体里的 `<!ENTITY` → 实体声明挪到**外部 DTD**（过滤器看不见，解析器会加载）
-- **SSTI**：黑名单挡括号 → 反引号 `` `cmd` ``（运算符不需要括号）
-- **CSRF**：检查 `Referer` → 攻击者用 `no-referrer` 去掉它，或注册一个含目标域名的自己人域名
-- **越权**：归属校验写对了 → 但「我是谁」来自请求参数 `uid`
-
-> **防护所依据的那个信息，如果是请求方可以自由决定的，那它就挡不住请求方。**
-
-CI 里 171 条断言守着这批资产不被改坏，每条都分三类：
-**漏洞场景**（没被改坏）、**对照组**（证明防护确实在工作）、**反向保护**（修复没有过度）。
-
-📖 [README](https://github.com/hediwen831-star/vulnlab) ·
+[README](https://github.com/hediwen831-star/vulnlab) ·
 [13 份 Writeup](https://github.com/hediwen831-star/vulnlab/tree/main/writeups) ·
-[设计文档：技术栈与教学设计](https://github.com/hediwen831-star/vulnlab/blob/main/docs/DESIGN.md)
+[设计文档](https://github.com/hediwen831-star/vulnlab/blob/main/docs/DESIGN.md)
 
----
+## burp-idor-detector
 
-## 3. burp-idor-detector
+Burp 插件。从流量里挑出「像资源标识」的参数，用第二个身份重放，再用一个不存在的 ID 做对照，判断服务端有没有校验资源归属。
 
-> 越权访问的自动化检测插件。从 Burp 的真实流量里挑出「像资源标识的参数」，
-> 用**第二身份**重放，通过**三态对比**判断服务端是否校验了资源归属。
+比对前会先做标准化：去掉 CSRF token、时间戳、traceId 这类每次都变的内容，再算 5-gram Jaccard 相似度，加上状态码和 Content-Type 的权重。
 
-核心是**三态对比**：
+判定分三种情况：
 
-```
-① 基准请求        用自己的身份访问自己的资源
-② 换身份重放      用 A 的身份访问 B 的资源
-③ 不存在的 ID 对照 用一个一定不存在的 ID 再试一次   ← 关键
-```
+| 换身份后 | 对照请求 | 结论 |
+|---|---|---|
+| 相似 | 不相似 | 疑似越权 |
+| 相似 | 相似 | 接口对任何 ID 都返回固定内容，误报，丢弃 |
+| 不相似 | 任意 | 权限校验生效 |
 
-第 ③ 步挡掉的是同类工具最大的误报来源：很多站点对不存在的 ID 也返回一个
-「长得差不多」的错误页，只比对 ①② 就会把它判成越权。
+插件默认不主动发请求：只识别参数、写日志。需要在面板里配置第二身份并勾选「启用主动重放」才会开始检测。只对 `GET` / `HEAD` / `OPTIONS` 生效，每个 host 有候选配额和请求间隔。
 
-> 这和 attack-surface 里的「负向对照校验」是同一件事：
-> **排除「检测特征被检测行为本身制造出来」的可能。**
+94 个测试，判定逻辑与 Burp API 解耦，大部分可以脱离 Burp 跑。Release 里提供编译好的 jar。
 
-**设计上值得一提的**：判定逻辑（`ResponseComparator`）刻意与 Burp API 解耦，
-所以 94 个测试里绝大多数能脱离 Burp 单独跑。
+[README](https://github.com/hediwen831-star/burp-idor-detector) ·
+[设计文档](https://github.com/hediwen831-star/burp-idor-detector/blob/main/docs/DESIGN.md)
 
-📖 [README](https://github.com/hediwen831-star/burp-idor-detector) ·
-[设计文档：越权检测的判定模型](https://github.com/hediwen831-star/burp-idor-detector/blob/main/docs/DESIGN.md)
-
----
-
-## 两条命令跑通闭环
+## 跑一遍
 
 ```bash
-# 1) 起靶场（需要 PHP 7.2+，零其他依赖）
+# 1) 起靶场（需要 PHP 7.2+）
 cd vulnlab && ./start.sh          # Windows: start.bat
 
-# 2) 用平台引擎检测靶场（另开一个终端）
+# 2) 另开一个终端，用平台引擎扫靶场
 cd attack-surface && pip install -e .
 python -m asp.cli poc run http://127.0.0.1:8080 --dir ../vulnlab/pocs
 ```
@@ -162,29 +97,14 @@ high      vulnlab-idor-broken-access-control /idor/low.php?order_id=1003      1.
 high      vulnlab-csrf-state-change          /csrf/medium.php                1.00
 ```
 
-**13 个场景的机读 PoC 全部命中**，且 `high` 档一处未报 —— 这就是「基准集」的作用。
-
----
-
-## 这套东西能证明什么
-
-1. **不是「会用工具」，是「能设计工具」** ——
-   每个设计决策都能讲出取舍：为什么用 asyncio、为什么 PoC 引擎坚持不用 `eval`、
-   为什么负向对照要拿「不存在的 ID」而不是「另一个真实 ID」
-2. **有真实的调试记录** —— 开发中实际踩到过「报错信息回显 payload 导致特征被自己制造出来」
-   （误报 6 → 3）、「CI 断言和机读 PoC 是两套载荷，PoC 坏了 CI 却全绿」这些坑，都修掉了
-3. **工程化完整** —— 434 + 94 个离线可跑的单测、ruff 零告警、GitHub Actions CI、
-   配置校验、结构化日志、Docker 一键启动
-4. **有闭环** —— 三个项目互为验证，而不是三堆不相干的代码
-
----
+13 个场景的 PoC 全部命中，`high` 档没有误报。
 
 ## 免责声明
 
-以上项目均仅供**授权范围内的安全测试与学习**使用。
+以上项目仅用于授权范围内的安全测试与学习。
 
-- `vulnlab` 是**故意包含漏洞**的教学代码，**禁止部署到公网**
-- `attack-surface` 内置限速与可识别前缀标记，**禁止用于未授权目标**
-- `burp-idor-detector` 只应在你已获得授权的目标上使用
+- `vulnlab` 是故意包含漏洞的教学代码，不要部署到公网
+- `attack-surface` 内置限速与可识别前缀标记，不要用于未授权目标
+- `burp-idor-detector` 只应在已获得授权的目标上使用
 
 使用者需自行确保合规。
